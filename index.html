@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="pt-br" class="dark">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport" />
+    <title>N1 - Método Ativador Metabólico</title>
+
+    <!-- Dependências Externas -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+
+    <!-- React & Router -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            },
+            colors: {
+              n1: {
+                DEFAULT: '#13ec5b',
+                dim: '#0b8a36',
+                glow: '#80ffaa'
+              },
+              dark: {
+                bg: '#0B0E14',
+                card: '#151A23',
+                surface: '#1E2532'
+              }
+            }
+          },
+        },
+      };
+    </script>
+
+    <style>
+      body {
+        background-color: #0B0E14;
+        color: #ffffff;
+        -webkit-tap-highlight-color: transparent;
+        overflow-x: hidden;
+        width: 100%;
+      }
+
+      /* Layout fixo para Mobile */
+      #root {
+        max-width: 500px;
+        margin: 0 auto;
+        min-height: 100vh;
+        position: relative;
+      }
+
+      .glass {
+        background: rgba(21, 26, 35, 0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .material-symbols-rounded {
+        font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      }
+
+      /* Efeito de preenchimento de água */
+      .water-fill {
+        background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
+        transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      .progress-ring__circle {
+        transition: stroke-dashoffset 0.5s ease, stroke 0.5s ease;
+        transform: rotate(-90deg);
+        transform-origin: 50% 50%;
+      }
+
+      .animate-spin-slow {
+        animation: spin 3s linear infinite;
+      }
+
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, createContext, useContext } = React;
+        const { HashRouter, Routes, Route, Link, useNavigate, useLocation } = ReactRouterDOM;
+
+        // --- Contexto Global ---
+        const AppContext = createContext();
+
+        const useStickyState = (defaultValue, key) => {
+            const [value, setValue] = useState(() => {
+                const stickyValue = window.localStorage.getItem(key);
+                return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
+            });
+            useEffect(() => {
+                window.localStorage.setItem(key, JSON.stringify(value));
+            }, [key, value]);
+            return [value, setValue];
+        };
+
+        const getCurrentDate = () => new Date().toISOString().split('T')[0];
+
+        // --- Níveis de Metabolismo ---
+        const METABOLISM_LEVELS = [
+            { threshold: 0, label: 'Lesma manca', emoji: '🐌', color: '#ef4444' },
+            { threshold: 11, label: 'Tartaruga hibernando', emoji: '🐢', color: '#f97316' },
+            { threshold: 21, label: 'Coelho acordando', emoji: '🐰', color: '#fbbf24' },
+            { threshold: 31, label: 'Capivara animada', emoji: '🐹', color: '#facc15' },
+            { threshold: 41, label: 'Lobo faminto', emoji: '🐺', color: '#a3e635' },
+            { threshold: 61, label: 'Leão em caça', emoji: '🦁', color: '#4ade80' },
+            { threshold: 81, label: 'Falcão Focado', emoji: '🦅', color: '#22c55e' },
+            { threshold: 91, label: 'Guepardo Insano', emoji: '🐆', color: '#13ec5b' },
+            { threshold: 100, label: 'Fenix Flamejante', emoji: '🔥', color: '#ffffff' }
+        ];
+
+        const getMetabolismLevel = (score) => {
+            return [...METABOLISM_LEVELS].reverse().find(level => score >= level.threshold) || METABOLISM_LEVELS[0];
+        };
+
+        // --- Componentes ---
+
+        const Header = ({ title, showBack = false }) => {
+            const navigate = useNavigate();
+            return (
+                <header className="fixed top-0 left-0 right-0 z-40 bg-dark-bg/90 backdrop-blur-lg border-b border-white/5 h-16 flex items-center px-4 max-w-[500px] mx-auto">
+                    {showBack ? (
+                        <button onClick={() => navigate(-1)} className="p-2 text-gray-400">
+                            <span className="material-symbols-rounded">arrow_back_ios_new</span>
+                        </button>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <img src="https://i.ibb.co/60C7N827/logo.png" alt="N1 Logo" className="h-8 w-auto" />
+                        </div>
+                    )}
+                    <h1 className="text-lg font-bold tracking-tight text-white flex-1 ml-2 truncate">{title}</h1>
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-n1 animate-pulse"></div>
+                        <span className="text-[10px] font-black text-n1 tracking-widest uppercase">Ativo</span>
+                    </div>
+                </header>
+            );
+        };
+
+        const NavBar = () => {
+            const navigate = useNavigate();
+            const location = useLocation();
+            
+            // Nova ordem conforme solicitado: Hoje, Hidratação, Método, Lista (Link)
+            const navItems = [
+                { path: '/', icon: 'dashboard', label: 'Hoje' },
+                { path: '/hydration', icon: 'water_drop', label: 'Água' },
+                { path: '/method', icon: 'school', label: 'Método' },
+                { 
+                    path: 'https://sites.google.com/view/guiaativadorn1/app', 
+                    icon: 'nutrition', 
+                    label: 'Lista', 
+                    isExternal: true 
+                },
+            ];
+
+            return (
+                <div className="fixed bottom-0 left-0 right-0 p-4 z-50 max-w-[500px] mx-auto">
+                    <div className="glass rounded-[2.5rem] h-16 flex items-center justify-around px-2 shadow-2xl">
+                        {navItems.map((item) => {
+                            const isActive = location.pathname === item.path;
+                            return (
+                                <button 
+                                    key={item.label}
+                                    onClick={() => {
+                                        if (item.isExternal) {
+                                            window.location.href = item.path;
+                                        } else {
+                                            navigate(item.path);
+                                        }
+                                    }}
+                                    className={`flex flex-col items-center justify-center w-12 h-12 rounded-full transition-all duration-300 ${isActive ? 'bg-n1 text-black shadow-lg shadow-n1/40 scale-110' : 'text-gray-500'}`}
+                                >
+                                    <span className="material-symbols-rounded text-2xl">{item.icon}</span>
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        const CircularProgress = ({ score, color }) => {
+            const size = 160;
+            const strokeWidth = 12;
+            const radius = (size - strokeWidth) / 2;
+            const circumference = radius * 2 * Math.PI;
+            const offset = circumference - (score / 100) * circumference;
+
+            return (
+                <div className="relative flex items-center justify-center">
+                    <svg width={size} height={size}>
+                        <circle
+                            className="text-dark-surface"
+                            strokeWidth={strokeWidth}
+                            stroke="currentColor"
+                            fill="transparent"
+                            r={radius}
+                            cx={size / 2}
+                            cy={size / 2}
+                        />
+                        <circle
+                            className="progress-ring__circle"
+                            strokeWidth={strokeWidth}
+                            strokeDasharray={circumference}
+                            strokeDashoffset={offset}
+                            strokeLinecap="round"
+                            stroke={color}
+                            fill="transparent"
+                            r={radius}
+                            cx={size / 2}
+                            cy={size / 2}
+                        />
+                    </svg>
+                    <div className="absolute flex flex-col items-center">
+                        <span className="material-symbols-rounded text-4xl mb-1 transition-all duration-500" style={{ color: color }}>
+                            local_fire_department
+                        </span>
+                        <span className="text-3xl font-black text-white">{score}%</span>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Telas ---
+
+        const Dashboard = () => {
+            const { weight } = useContext(AppContext);
+            const today = getCurrentDate();
+            const [tasks, setTasks] = useStickyState({
+                lemonWater: false, 
+                training: false, 
+                sleep: false, 
+                plateRule: false, 
+                healthyFood: false,
+                noSnack: false, 
+                earlyDinner: false
+            }, `n1_tasks_v2_${today}`);
+            
+            const [waterIntake, setWaterIntake] = useStickyState(0, `n1_water_${today}`);
+            const waterGoal = weight * 0.035;
+
+            const calculateScore = () => {
+                let s = 0;
+                // Cards principais
+                if (tasks.training) s += 20;
+                if (tasks.sleep) s += 15;
+                // Água dinâmica (15 pontos)
+                const waterPercent = Math.min((waterIntake / waterGoal), 1);
+                s += Math.round(waterPercent * 15);
+                // Checklist (10 pontos cada)
+                if (tasks.lemonWater) s += 10;
+                if (tasks.plateRule) s += 10;
+                if (tasks.healthyFood) s += 10;
+                if (tasks.noSnack) s += 10;
+                if (tasks.earlyDinner) s += 10;
+
+                return Math.min(s, 100);
+            };
+
+            const score = calculateScore();
+            const currentLevel = getMetabolismLevel(score);
+
+            useEffect(() => {
+                if (score === 100) {
+                    confetti({
+                        particleCount: 150,
+                        spread: 70,
+                        origin: { y: 0.6 },
+                        colors: ['#13ec5b', '#ffffff', '#fbbf24']
+                    });
+                }
+            }, [score]);
+
+            return (
+                <div className="pt-20 pb-28 px-4 animate-slide-up">
+                    <Header title="Desperta Metabolismo" />
+                    
+                    {/* Hero de Progresso */}
+                    <div className="flex flex-col items-center mb-8">
+                        <div className="relative mb-4">
+                            <div className="absolute inset-0 blur-3xl rounded-full opacity-20" style={{ backgroundColor: currentLevel.color }}></div>
+                            <CircularProgress score={score} color={currentLevel.color} />
+                        </div>
+                        
+                        <div className="glass px-6 py-3 rounded-full flex items-center gap-3 border-n1/10">
+                            <span className="text-2xl">{currentLevel.emoji}</span>
+                            <div className="text-left">
+                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none mb-1">Nível de Metabolismo</p>
+                                <h2 className="text-sm font-black text-white leading-none" style={{ color: currentLevel.color }}>{currentLevel.label}</h2>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                        {/* Card Treino */}
+                        <button 
+                            onClick={() => setTasks({...tasks, training: !tasks.training})}
+                            className={`col-span-2 p-5 rounded-3xl transition-all active:scale-95 ${tasks.training ? 'bg-n1 text-black shadow-lg shadow-n1/20' : 'bg-dark-card border border-white/5'}`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <span className="material-symbols-rounded text-2xl">fitness_center</span>
+                                    <div className="text-left">
+                                        <h3 className="font-bold">Treino = Banho</h3>
+                                        <p className="text-[10px] opacity-70">Obrigatório Nível 1</p>
+                                    </div>
+                                </div>
+                                {tasks.training && <span className="material-symbols-rounded font-black">check_circle</span>}
+                            </div>
+                        </button>
+
+                        {/* Card Água */}
+                        <div className="glass p-4 rounded-3xl flex flex-col justify-between h-32 relative overflow-hidden">
+                            <div className="absolute bottom-0 left-0 right-0 bg-blue-500/10 transition-all duration-700" style={{ height: `${(waterIntake/waterGoal)*100}%` }}></div>
+                            <span className="material-symbols-rounded text-blue-400 relative z-10">water_drop</span>
+                            <div className="relative z-10">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase">Hidratação</h3>
+                                <p className="text-lg font-bold">{waterIntake.toFixed(1)}L</p>
+                            </div>
+                        </div>
+
+                        {/* Card Sono */}
+                        <button 
+                            onClick={() => setTasks({...tasks, sleep: !tasks.sleep})}
+                            className={`p-4 rounded-3xl flex flex-col justify-between h-32 transition-all active:scale-95 ${tasks.sleep ? 'bg-indigo-600/20 border border-indigo-500/50' : 'bg-dark-card border border-white/5'}`}
+                        >
+                            <span className={`material-symbols-rounded ${tasks.sleep ? 'text-indigo-400' : 'text-gray-600'}`}>nights_stay</span>
+                            <div className="text-left">
+                                <h3 className="text-xs font-bold uppercase text-gray-400">Sono</h3>
+                                <p className="text-xs font-bold">Antes 23h</p>
+                            </div>
+                        </button>
+                    </div>
+
+                    {/* Checklist Alimentação & Hábitos */}
+                    <div className="space-y-2">
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-3 ml-2">Alimentação & Hábitos</p>
+                        
+                        <CompactCheck 
+                            label="Água com Limão ao acordar" 
+                            checked={tasks.lemonWater} 
+                            onToggle={() => setTasks({...tasks, lemonWater: !tasks.lemonWater})} 
+                            icon="eco" 
+                        />
+                        <CompactCheck 
+                            label="Prato 50/25/25" 
+                            checked={tasks.plateRule} 
+                            onToggle={() => setTasks({...tasks, plateRule: !tasks.plateRule})} 
+                            icon="restaurant" 
+                        />
+                        <CompactCheck 
+                            label="Alimentação Saudável" 
+                            checked={tasks.healthyFood} 
+                            onToggle={() => setTasks({...tasks, healthyFood: !tasks.healthyFood})} 
+                            icon="health_and_safety" 
+                        />
+                        <CompactCheck 
+                            label="Não beliscar, maximo 4 ref." 
+                            checked={tasks.noSnack} 
+                            onToggle={() => setTasks({...tasks, noSnack: !tasks.noSnack})} 
+                            icon="block" 
+                        />
+                        <CompactCheck 
+                            label="Jantar até as 19:30hs" 
+                            checked={tasks.earlyDinner} 
+                            onToggle={() => setTasks({...tasks, earlyDinner: !tasks.earlyDinner})} 
+                            icon="event_upcoming" 
+                        />
+                    </div>
+
+                    <NavBar />
+                </div>
+            );
+        };
+
+        const CompactCheck = ({ label, checked, onToggle, icon }) => (
+            <div onClick={onToggle} className={`flex items-center gap-3 p-4 rounded-2xl border transition-all active:scale-98 cursor-pointer ${checked ? 'bg-n1/5 border-n1/20 shadow-sm shadow-n1/5' : 'bg-dark-card border-white/5'}`}>
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${checked ? 'bg-n1 text-black' : 'bg-dark-surface text-gray-600'}`}>
+                    <span className="material-symbols-rounded text-xl">{icon}</span>
+                </div>
+                <span className={`flex-1 text-sm font-bold ${checked ? 'text-white' : 'text-gray-400'}`}>{label}</span>
+                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${checked ? 'bg-n1 border-n1' : 'border-gray-700'}`}>
+                    {checked && <span className="material-symbols-rounded text-black text-[14px] font-black">check</span>}
+                </div>
+            </div>
+        );
+
+        const Hydration = () => {
+            const { weight, setWeight } = useContext(AppContext);
+            const today = getCurrentDate();
+            const [intake, setIntake] = useStickyState(0, `n1_water_${today}`);
+            
+            const goal = (weight || 80) * 0.035;
+            const progress = Math.min((intake / goal) * 100, 100);
+
+            return (
+                <div className="pt-20 pb-28 px-6 animate-slide-up">
+                    <Header title="Hidratação" showBack />
+                    
+                    <div className="glass p-6 rounded-[2.5rem] mb-8">
+                        <label className="block text-[10px] font-black text-n1 uppercase tracking-widest mb-4">Ajustar Meu Peso</label>
+                        <div className="flex items-center gap-4">
+                            <div className="relative flex-1">
+                                <input 
+                                    type="number" 
+                                    value={weight} 
+                                    onChange={(e) => setWeight(Number(e.target.value))}
+                                    className="w-full bg-dark-surface border-none rounded-2xl py-4 px-6 text-2xl font-black focus:ring-2 focus:ring-n1 transition-all"
+                                />
+                                <span className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-500 font-bold">KG</span>
+                            </div>
+                            <div className="bg-n1/10 p-4 rounded-2xl border border-n1/20 text-center min-w-[100px]">
+                                <span className="block text-[8px] font-black text-n1 uppercase">Meta Diária</span>
+                                <span className="text-lg font-black">{goal.toFixed(1)}L</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col items-center">
+                        <div className="relative w-40 h-64 bg-dark-surface rounded-[2rem] border-4 border-white/5 overflow-hidden shadow-2xl mb-10">
+                            <div className="absolute bottom-0 left-0 right-0 water-fill" style={{height: `${progress}%`}}>
+                                <div className="absolute top-0 left-0 right-0 h-4 bg-white/20 blur-sm"></div>
+                            </div>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
+                                <span className="text-3xl font-black text-white">{Math.round(progress)}%</span>
+                                <span className="text-[10px] font-bold text-white/50 uppercase tracking-widest">Batido</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 w-full">
+                            <button onClick={() => setIntake(prev => prev + 0.25)} className="bg-dark-card border border-white/5 p-5 rounded-3xl flex flex-col items-center gap-2 active:scale-90 transition-transform shadow-lg">
+                                <span className="material-symbols-rounded text-blue-400 text-3xl">local_drink</span>
+                                <span className="font-black text-sm">+250ml</span>
+                            </button>
+                            <button onClick={() => setIntake(prev => prev + 0.50)} className="bg-dark-card border border-white/5 p-5 rounded-3xl flex flex-col items-center gap-2 active:scale-90 transition-transform shadow-lg">
+                                <span className="material-symbols-rounded text-blue-400 text-3xl">water_bottle</span>
+                                <span className="font-black text-sm">+500ml</span>
+                            </button>
+                        </div>
+                        
+                        <button 
+                            onClick={() => setIntake(0)}
+                            className="mt-8 text-[10px] font-bold text-gray-600 uppercase tracking-widest hover:text-red-400 transition-colors"
+                        >
+                            Resetar Contador de Hoje
+                        </button>
+                    </div>
+                    <NavBar />
+                </div>
+            );
+        };
+
+        const Method = () => (
+            <div className="pt-20 pb-28 px-4 animate-slide-up">
+                <Header title="O Método" showBack />
+                <div className="space-y-6">
+                    <div className="glass p-2 rounded-[2rem] overflow-hidden shadow-2xl border-n1/10">
+                        <div className="relative pt-[56.25%] w-full rounded-[1.5rem] overflow-hidden">
+                            <iframe 
+                                className="absolute top-0 left-0 w-full h-full"
+                                src="https://www.youtube.com/embed/tbvjWN2kbMA?si=UEM8bq3DRXL3m1U8" 
+                                title="Ativador Metabolismo N1" 
+                                frameBorder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                                allowFullScreen
+                            ></iframe>
+                        </div>
+                        <div className="p-5">
+                            <h2 className="text-lg font-black text-white">Guia Ativador Nível 1</h2>
+                            <p className="text-xs text-gray-400 mt-2 leading-relaxed">Aprenda a lógica por trás da queima de gordura e reprogramação hormonal.</p>
+                        </div>
+                    </div>
+
+                    <div className="glass p-6 rounded-[2.5rem] space-y-4">
+                        <h3 className="text-n1 font-black text-sm uppercase tracking-widest mb-2">Fundamentos N1</h3>
+                        <MethodStep num="1" title="Sono" text="Durma antes das 23h. É onde a mágica acontece." />
+                        <MethodStep num="2" title="Hidratação" text="35ml por kg. Água é o combustível da queima." />
+                        <MethodStep num="3" title="Treino" text="Higiene diária. Força + Cardio." />
+                        <MethodStep num="4" title="Alimentação" text="Alimentação natural desinflamatoria." />
+                    </div>
+                </div>
+                <NavBar />
+            </div>
+        );
+
+        const MethodStep = ({ num, title, text }) => (
+            <div className="flex gap-4 p-4 rounded-2xl bg-dark-surface/30 border border-white/5">
+                <span className="w-8 h-8 rounded-full bg-n1 text-black flex items-center justify-center font-black text-xs shrink-0">{num}</span>
+                <div>
+                    <h4 className="font-bold text-sm text-white">{title}</h4>
+                    <p className="text-[11px] text-gray-500 mt-1 leading-tight">{text}</p>
+                </div>
+            </div>
+        );
+
+        const App = () => {
+            const [weight, setWeight] = useStickyState(80, 'n1_user_weight_v2');
+
+            return (
+                <AppContext.Provider value={{ weight, setWeight }}>
+                    <HashRouter>
+                        <Routes>
+                            <Route path="/" element={<Dashboard />} />
+                            <Route path="/hydration" element={<Hydration />} />
+                            <Route path="/method" element={<Method />} />
+                        </Routes>
+                    </HashRouter>
+                </AppContext.Provider>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+  </body>
+
+</html>
